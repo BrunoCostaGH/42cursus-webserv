@@ -24,7 +24,7 @@ Webserv provides a hands-on, educational experience for anyone interested in the
 ## 🎥 **Demo**
 
 <p align="center">
-  <img src="./github/demo.gif" width="100%">
+  <img src="/.github/demo.gif" width="100%">
 </p>
 
 
