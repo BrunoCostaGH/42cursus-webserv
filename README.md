@@ -1,4 +1,4 @@
-# **webserver**
+# **42cursus-cub3d** ([Subject](/.github/en.subject.pdf))
 This project was graded <strong>110/100</strong>.
 
 ## 📝 **Authorship**
@@ -11,7 +11,7 @@ This project was graded <strong>110/100</strong>.
 To successfully clone this repository, use this command
 
 ```shell
-git clone https://github.com/maricard18/42-webserver.git 
+git clone https://github.com/BrunoCostaGH/42cursus-webserv.git
 ```
 
 ## 📒 **About**
@@ -24,7 +24,7 @@ Webserv provides a hands-on, educational experience for anyone interested in the
 ## 🎥 **Demo**
 
 <p align="center">
-  <img src="./assets/demo.gif" width="100%">
+  <img src="./github/demo.gif" width="100%">
 </p>
 
 
@@ -73,8 +73,8 @@ Server {
 This project was tested using self-made tests. <br><br>
 If you wish to access some of these tests, please send us a message on Slack.
 
----
-> Feel free to ask me any questions through Slack (**maricard**). <br>
-> GitHub [@maricard18](https://github.com/maricard18) &nbsp;&middot;&nbsp;
-> Linkedin [Mario Henriques](https://www.linkedin.com/in/mario18) &nbsp;&middot;&nbsp;
-> [42 Porto](https://www.42porto.com/en)
+[![GitHub](https://img.shields.io/github/license/BrunoCostaGH/42cursus-webserv?style=for-the-badge)](https://github.com/BrunoCostaGH/42cursus-webserv/blob/master/LICENSE.md)
+[![GitHub contributors](https://img.shields.io/github/contributors/BrunoCostaGH/42cursus-webserv?style=for-the-badge)](https://github.com/BrunoCostaGH/42cursus-webserv)
+[![GitHub issues](https://img.shields.io/github/issues/BrunoCostaGH/42cursus-webserv?style=for-the-badge)](https://github.com/BrunoCostaGH/42cursus-webserv/issues)
+[![GitHub Release Date](https://img.shields.io/github/release-date/BrunoCostaGH/42cursus-webserv?style=for-the-badge)](https://github.com/BrunoCostaGH/42cursus-webserv/releases/latest)
+[![GitHub release (latest by date)](https://img.shields.io/github/v/release/BrunoCostaGH/42cursus-webserv?style=for-the-badge)](https://github.com/BrunoCostaGH/42cursus-webserv/releases/latest)
