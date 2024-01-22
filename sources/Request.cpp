@@ -6,7 +6,7 @@
 /*   By: maricard <maricard@student.porto.com>      +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2023/10/17 17:14:44 by maricard          #+#    #+#             */
-/*   Updated: 2023/12/04 19:19:00 by bsilva-c         ###   ########.fr       */
+/*   Updated: 2024/01/20 18:41:09 by bsilva-c         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -14,20 +14,12 @@
 #include "Request.hpp"
 
 Request::Request()
-	: _bodyLength(), _maxBodySize(), _connection(), _server()
-{
-}
-
-Request::Request(int connection)
-	: _bodyLength(0),
-	  _maxBodySize(0),
-	  _connection(connection),
-	  _server()
+	: _bodyLength(0)
 {
 }
 
 Request::Request(const Request& copy)
-	: _bodyLength(), _maxBodySize(), _connection(), _server()
+	: _bodyLength(copy._bodyLength)
 {
 	*this = copy;
 }
@@ -50,10 +42,13 @@ Request& Request::operator=(const Request& other)
 	_header = other._header;
 	_body = other._body;
 	_bodyLength = other._bodyLength;
-	_maxBodySize = other._maxBodySize;
 	_uploadStore = other._uploadStore;
-	_connection = other._connection;
 	return *this;
+}
+
+std::string Request::getRequestLine() const
+{
+	return (_protocol + " " + _method + " " + _uri);
 }
 
 std::string Request::getMethod() const
@@ -69,11 +64,6 @@ std::string Request::getPath() const
 std::string Request::getQuery() const
 {
 	return _query;
-}
-
-std::string Request::getProtocol() const
-{
-	return _protocol;
 }
 
 std::map<std::string, std::string>	Request::getHeader() const
@@ -106,39 +96,9 @@ std::string Request::getHeaderField(const std::string& field)
 	return _header[field];
 }
 
-Server* Request::getServer() const
+static void selectServer(Cluster& cluster, Connection& connection)
 {
-	return (this->_server);
-}
-
-void Request::setServer(Server* server)
-{
-	this->_server = server;
-	this->_maxBodySize = server->getClientMaxBodySize();
-
-	Response::setResponseServer(server);
-}
-
-static std::string in_addr_t_to_ip(in_addr_t addr)
-{
-	std::ostringstream oss;
-
-	for (int i = 0; i < 4; ++i)
-	{
-		in_addr_t octet = (addr >> (i * 8)) & 0xFF;
-		oss << octet;
-
-		if (i < 3)
-		{
-			oss << ".";
-		}
-	}
-	return oss.str();
-}
-
-static void selectServer(Cluster& cluster, Request& request)
-{
-	std::stringstream host(request.getHeaderField("Host"));
+	std::stringstream host(connection.getRequest()->getHeaderField("Host"));
 	std::string serverName;
 	std::vector<Server*> serverList = cluster.getServerList();
 	std::vector<Server*>::iterator hostIt = serverList.begin();
@@ -148,30 +108,24 @@ static void selectServer(Cluster& cluster, Request& request)
 	{
 		if ((*hostIt)->isServerName(serverName))
 		{
-			request.setServer(*hostIt);
+			connection.setServer(*hostIt);
 			break ;
 		}
 	}
-
-	struct sockaddr_in clientAddress = {};
-	Server* server = request.getServer();
-	std::stringstream	port;
-
-	port << server->getListenPort();
-	MESSAGE("Connected " +
-			in_addr_t_to_ip(clientAddress.sin_addr.s_addr) +
-			" to " + port.str(), INFORMATION)
 }
 
-int	Request::parseRequest(Cluster& cluster, char* buffer, int64_t bytesAlreadyRead)
+int Request::parseRequest(Cluster& cluster,
+						  Connection& connection,
+						  char* buffer,
+						  int64_t bytesAlreadyRead)
 {
 	int error;
 	std::string request = buffer;
 	std::stringstream ss(request);
 	std::string line;
 
-	ss >> _method >> _path >> _protocol;
-
+	ss >> _method >> _uri >> _protocol;
+	_path = _uri;
 	if (_path.find('?') != std::string::npos)
 	{
 		_query = _path.substr(_path.find('?') + 1, _path.length());
@@ -194,9 +148,9 @@ int	Request::parseRequest(Cluster& cluster, char* buffer, int64_t bytesAlreadyRe
 	if (line != "\n")
 		return 413;
 
-	selectServer(cluster, *this);
+	selectServer(cluster, connection);
 
-	if ((error = checkErrors()))
+	if ((error = checkErrors(connection)))
 		return error;
 
 	uint32_t pos = 0;
@@ -205,14 +159,18 @@ int	Request::parseRequest(Cluster& cluster, char* buffer, int64_t bytesAlreadyRe
 	pos += 4;
 
 	if (_header["Transfer-Encoding"] == "chunked")
-		error = parseChunkedRequest(buffer + pos, bytesAlreadyRead - pos);
+		error = parseChunkedRequest(connection.getSocket(),
+									buffer + pos,
+									bytesAlreadyRead - pos);
 	else if (_method == "POST")
-		error = parseBody(buffer + pos, bytesAlreadyRead - pos);
+		error = parseBody(connection.getSocket(),
+						  buffer + pos,
+						  bytesAlreadyRead - pos);
 
 	return error;
 }
 
-int	Request::checkErrors()
+int Request::checkErrors(Connection& connection)
 {
 	if (_method == "POST" && (_header["Content-Type"].empty() ||
 	   (_header["Content-Type"].find("multipart/form-data") == std::string::npos && 
@@ -236,15 +194,15 @@ int	Request::checkErrors()
 	{
 		std::istringstream ss(_header["Content-Length"]);
 		ss >> _bodyLength;
-		
-		if (_bodyLength > _maxBodySize)
+
+		if (_bodyLength > connection.getServer()->getClientMaxBodySize())
 			return 413;
 	}
 	
 	return 0;
 }
 
-int Request::parseBody(char* previousBuffer, int64_t bytesToRead)
+int Request::parseBody(int socket, char* previousBuffer, int64_t bytesToRead)
 {
 	int64_t bytesRead;
 	char 	buffer[4096];
@@ -258,7 +216,7 @@ int Request::parseBody(char* previousBuffer, int64_t bytesToRead)
 	for (unsigned i = 0; i < sizeof(buffer); ++i)
 		buffer[i] = '\0';
 
-	while ((bytesRead = recv(_connection, buffer, 4096, 0)) > 0)
+	while ((bytesRead = recv(socket, buffer, 4096, 0)) > 0)
 	{
 		for (unsigned i = 0; i < bytesRead; i++)
 			_body.push_back(buffer[i]);
@@ -278,7 +236,9 @@ int Request::parseBody(char* previousBuffer, int64_t bytesToRead)
 	return 0;
 }
 
-int Request::parseChunkedRequest(char* previousBuffer, int64_t bytesToRead)
+int Request::parseChunkedRequest(int socket,
+								 char* previousBuffer,
+								 int64_t bytesToRead)
 {
 	int64_t bytesRead;
 	char 	buffer[4096];
@@ -289,8 +249,8 @@ int Request::parseChunkedRequest(char* previousBuffer, int64_t bytesToRead)
 
 	for (unsigned i = 0; i < sizeof(buffer); ++i)
 		buffer[i] = '\0';
-	
-	while ((bytesRead = recv(_connection, buffer, 4096, 0)) > 0)
+
+	while ((bytesRead = recv(socket, buffer, 4096, 0)) > 0)
 	{
 		for (unsigned i = 0; i < bytesRead; i++)
 			chunkedBody.push_back(buffer[i]);
@@ -344,7 +304,7 @@ int Request::isValidRequest(Server& server, int& error)
 	if (server.getRoot().empty())
 		return ((error = 403));
 
-	/* Check if can perform request based on method, within specified location */
+	/* Check if it can perform request based on method, within specified location */
 	std::string path = this->_path;
 	Location* location = server.getLocation(path);
 	if (location)
@@ -428,10 +388,8 @@ validateRequest:
 	return (selectOptionAndReturn(*this));
 }
 
-void	Request::displayVars()
+void Request::displayVars()
 {
-	MESSAGE(_protocol + " " + _method + " " + _path, REQUEST)
-	
 //	std::cout << F_YELLOW "Protocol: " RESET + _protocol << std::endl;
 //	std::cout << F_YELLOW "Method: " RESET + _method << std::endl;
 //	std::cout << F_YELLOW "Path: " RESET + _path << std::endl;

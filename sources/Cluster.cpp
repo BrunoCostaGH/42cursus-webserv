@@ -6,7 +6,7 @@
 /*   By: maricard <maricard@student.porto.com>      +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2023/10/13 12:41:04 by bsilva-c          #+#    #+#             */
-/*   Updated: 2023/12/06 14:54:13 by bsilva-c         ###   ########.fr       */
+/*   Updated: 2024/01/20 19:04:55 by bsilva-c         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -14,12 +14,13 @@
 #include <fstream>
 
 Cluster::Cluster()
-	: _master_sockets(), _read_sockets(), _write_sockets()
+	: _connection_id(0), _master_sockets(), _read_sockets(), _write_sockets()
 {
 }
 
 Cluster::Cluster(const Cluster& value)
-	: _serverList(value._serverList),
+	: _connection_id(0),
+	  _serverList(value._serverList),
 	  _master_sockets(),
 	  _read_sockets(),
 	  _write_sockets()
@@ -40,13 +41,23 @@ Cluster& Cluster::operator=(const Cluster& value)
 
 Cluster::~Cluster()
 {
-	std::vector<Server*>::iterator it = this->_serverList.begin();
-	
-	for (; it != this->_serverList.end(); ++it)
+	for (std::vector<Server*>::iterator it = this->_serverList.begin();
+		 it != this->_serverList.end(); ++it)
 	{
 		delete *it;
 		*it = 0;
 	}
+	for (std::map<int, Connection*>::iterator it = this->_connections.begin();
+		 it != this->_connections.end(); ++it)
+	{
+		delete (it->second);
+		it->second = NULL;
+	}
+}
+
+int Cluster::getNextConnectionID()
+{
+	return (this->_connection_id++);
 }
 
 std::vector<Server*> Cluster::getServerList() const
@@ -119,7 +130,7 @@ static int getServerConfig(std::vector<Server*>* serverList, std::fstream* fstre
 
 		if (line.empty() || line.find_first_not_of(" \t") == std::string::npos)
 			continue;
-		
+
 		ss << line;
 		ss >> directive;
 		if (directive.empty() || directive.at(0) == ';' || directive.at(0) == '#')
@@ -130,7 +141,7 @@ static int getServerConfig(std::vector<Server*>* serverList, std::fstream* fstre
 				continue;
 			std::string path;
 			ss >> path;
-			if (path.empty() || (path.at(0) == '.' && path.length() == 1) || 
+			if (path.empty() || (path.at(0) == '.' && path.length() == 1) ||
 				(path.at(0) != '.' && path.find('/')) ||
 				(path.at(0) != '/' && path.find('.')) ||
 				path.find("//") != std::string::npos) // check if is path
@@ -259,10 +270,17 @@ int Cluster::configure(const std::string& path)
 	return (0);
 }
 
-static void closeConnection(int connection)
+void Cluster::closeConnection(int socket)
 {
-	MESSAGE("Connection closed gracefully", INFORMATION)
-	close(connection);
+	FD_CLR(socket, &_master_sockets);
+	close(socket);
+
+	LOG(_connections[socket]->getConnectionID(),
+		"Connection closed gracefully",
+		INFORMATION)
+	delete _connections[socket];
+	_connections.erase(socket);
+
 }
 
 static bool isAnyServerRunning(fd_set& set)
@@ -275,12 +293,12 @@ static bool isAnyServerRunning(fd_set& set)
 	return (false);
 }
 
-void Cluster::run()
+void Cluster::boot()
 {
 	FD_ZERO(&_master_sockets);
-	std::vector<Server*>::iterator it = this->_serverList.begin();
 
-	for (; it != this->_serverList.end(); ++it)
+	for (std::vector<Server*>::iterator it = this->_serverList.begin();
+		 it != this->_serverList.end(); ++it)
 	{
 		std::stringstream port;
 		port << (*it)->getListenPort();
@@ -292,156 +310,226 @@ void Cluster::run()
 		MESSAGE("Listening on " + (*it)->getAddress() + ":" + port.str(), INFORMATION)
 		FD_SET((*it)->getSocket(), &_master_sockets);
 	}
+}
+
+static void checkConnections(Cluster& cluster,
+							 std::map<int, Connection*>& connections)
+{
+	std::map<int, Connection*>::iterator it = connections.begin();
+	for (; it != connections.end(); it++)
+	{
+		if (std::time(0) >= ((*it).second->getTimestamp() + 60))
+		{
+			cluster.closeConnection((*it).second->getSocket());
+			checkConnections(cluster, connections);
+			return;
+		}
+	}
+}
+
+void Cluster::run()
+{
 	if (!isAnyServerRunning(_master_sockets))
 	{
 		MESSAGE("No servers were created", ERROR)
 		return;
 	}
-	
+
 	while (true)
 	{
+		checkConnections(*this, _connections);
 		_read_sockets = _master_sockets;
 		_write_sockets = _master_sockets;
-		int connection = -1;
 		std::string response;
 
-		int selctResult = select(FD_SETSIZE, &_read_sockets, &_write_sockets, NULL, NULL);
-		if (selctResult < 0)
+		int selectResult = select(FD_SETSIZE, &_read_sockets, &_write_sockets, NULL, NULL);
+		if (selectResult < 0)
 		{
 			std::stringstream ss;
 			ss << errno;
-			MESSAGE( "select(): " + ss.str() + ": " + (std::string)strerror(errno), ERROR)
+			MESSAGE("select(): " + ss.str() + ": " + (std::string)strerror(errno), ERROR)
 			continue;
 		}
-		else if (selctResult == 0)
+		else if (selectResult == 0)
 			continue;
 
-		acceptNewConnections(connection);
+		acceptNewConnections();
 
-		std::map<Server*, int>::iterator it = _connections.begin();
-		for (; it != _connections.end(); it++)
+		for (std::map<int, Connection*>::iterator it = _connections.begin();
+			 it != _connections.end(); it++)
 		{
-			readRequest(it->first, it->second, response);
-			sendResponse(it->second, response);
+			if (FD_ISSET((*it).first, &this->_read_sockets))
+				readRequest(*it->second);
+			if (FD_ISSET((*it).first, &this->_write_sockets))
+				sendResponse(*it->second);
 		}
 	}
 }
 
-void	Cluster::acceptNewConnections(int connection)
+static std::string in_addr_t_to_ip(in_addr_t addr)
+{
+	std::ostringstream oss;
+
+	for (int i = 0; i < 4; ++i)
+	{
+		in_addr_t octet = (addr >> (i * 8)) & 0xFF;
+		oss << octet;
+
+		if (i < 3)
+		{
+			oss << ".";
+		}
+	}
+	return oss.str();
+}
+
+void Cluster::acceptNewConnections()
 {
 	std::vector<Server*>::iterator it = this->_serverList.begin();
 	struct sockaddr_in clientAddress = {};
 	socklen_t clientAddressLength = sizeof(clientAddress);
-	
+
 	for (; it != this->_serverList.end(); ++it)
 	{
 		if (!(*it)->getSocket())
 			continue;
-		
+
 		if (FD_ISSET((*it)->getSocket(), &this->_read_sockets))
 		{
-			if ((connection = accept((*it)->getSocket(), (struct sockaddr*)&clientAddress, 
-				(socklen_t*)&clientAddressLength)) < 0)
+			int socket;
+			if ((socket = accept((*it)->getSocket(),
+								 (struct sockaddr*)&clientAddress,
+								 (socklen_t*)&clientAddressLength)) < 0)
 			{
 				std::stringstream ss;
 				ss << errno;
-				MESSAGE("accept(): " + ss.str() + ": " + (std::string)strerror(errno), ERROR)
+				MESSAGE("accept(): " + ss.str() + ": " +
+						(std::string)strerror(errno), ERROR)
 				continue;
 			}
-			
-			FD_SET(connection, &this->_read_sockets);
-			_connections[(*it)] = connection;
+
+			std::string client_address = in_addr_t_to_ip(clientAddress.sin_addr.s_addr);
+			std::stringstream ss;
+			ss << socket;
+
+			FD_SET(socket, &this->_master_sockets);
+			_connections[socket] = new Connection(getNextConnectionID(), client_address, socket);
+			_connections[socket]->setServer(*it);
+			LOG(_connections[socket]->getConnectionID(),
+				"Connected with client at " +
+				_connections[socket]->getClientAddress(),
+				INFORMATION)
+			_connections[socket]->setTimestamp(std::time(0));
 		}
 	}
 }
 
-void	Cluster::readRequest(Server* server, int connection, std::string& response)
+void Cluster::readRequest(Connection& connection)
 {
+	Request* request = connection.getRequest();
+	if (!request)
+		request = connection.setRequest(new Request());
+
+	int64_t bytesRead;
+	int64_t bytesLeftToRead = 4096;
+	char buffer[bytesLeftToRead];
 	int error = 0;
-	
-	if (FD_ISSET(connection, &this->_read_sockets))
+
+	for (size_t i = 0; i < sizeof(buffer); ++i)
+		buffer[i] = '\0';
+
+	if ((bytesRead = recv(connection.getSocket(), buffer, bytesLeftToRead, 0)) > 0)
 	{
-		Request request(connection);
-		int64_t bytesRead;
-		int64_t bytesLeftToRead = 4096;
-		char 	buffer[bytesLeftToRead];
-		
-		for (size_t i = 0; i < sizeof(buffer); ++i)
-			buffer[i] = '\0';
+		connection.setTimestamp(std::time(0));
 
-		if ((bytesRead = recv(connection, buffer, bytesLeftToRead, 0)) > 0)
-		{
-			request.setServer(server);
-			error = request.parseRequest(*this, buffer, bytesRead);
-			server = request.getServer();
-			/*
-			 * Continue reading from the socket, if there is content
-			 * left to read beyond the specified Content-Length.
-			 */
-			int bytesToRead = 4096;
-			char body_buffer[bytesToRead];
-			while ((bytesRead = recv(connection, body_buffer, bytesToRead, 0)) != -1 && bytesRead != 0);
-			
-			request.displayVars();
+		error = request->parseRequest(*this, connection, buffer, bytesRead);
+		/*
+		 * Continue reading from the socket, if there is content
+		 * left to read beyond the specified Content-Length.
+		 */
+		int bytesToRead = 4096;
+		char body_buffer[bytesToRead];
+		while ((bytesRead = recv(connection.getSocket(), body_buffer, bytesToRead, 0)) != -1 &&
+			bytesRead != 0);
 
-			int selectedOptions = request.isValidRequest((*server), error);
+		request->displayVars();
 
-			if (!error)
-				response = checkRequestedOption(selectedOptions, request, server);
-		}
-		else
-		{
-			close(connection);
-			return ;
-		}
+		int selectedOptions = request->isValidRequest(*connection.getServer(), error);
 
-		if (error)
-			response = Response::buildErrorResponse(error);
-
-		MESSAGE("Request processed successfully", INFORMATION)
-		FD_CLR(connection, &this->_read_sockets);
-		FD_SET(connection, &this->_write_sockets);
+		if (!error)
+			connection.setResponse(checkRequestedOption(selectedOptions, connection));
 	}
+	else
+	{
+		closeConnection(connection.getSocket());
+		Cluster::run();
+		return;
+	}
+
+	if (error)
+		connection.setResponse(Response::buildErrorResponse(connection, error));
 }
 
-std::string	Cluster::checkRequestedOption(int selectedOptions, Request& request, Server* server)
+std::string Cluster::checkRequestedOption(int selectedOptions,
+										  Connection& connection)
 {
+	Server* server = connection.getServer();
+	Request& request = *connection.getRequest();
+
 	if (selectedOptions & REDIR)
-		return server->redirect(request);
+		return server->redirect(connection);
 	else if (selectedOptions & DIR_LIST)
-		return server->directoryListing(request);
+		return Server::directoryListing(connection);
 	else if (selectedOptions & CGI)
 	{
 		Cgi cgi(request);
-		return cgi.runCGI();
+		return cgi.runCGI(connection);
 	}
 	else if (selectedOptions & DELETE)
-		return server->deleteFile(request);
+		return Server::deleteFile(connection);
 	else if (selectedOptions & GET)
-		return server->getFile(request);
-	return Response::buildErrorResponse(500);
+		return Server::getFile(request);
+	return Response::buildErrorResponse(connection, 500);
 }
 
-void	Cluster::sendResponse(int connection, std::string& response)
+void Cluster::sendResponse(Connection& connection)
 {
-	if (FD_ISSET(connection, &this->_write_sockets))
+	std::string response = connection.getResponse();
+	if (response.empty())
+		return;
+
+	if (send(connection.getSocket(), response.c_str(), response.size(), 0) < 0)
+	LOG(connection.getConnectionID(),
+		"Sending response to socket",
+		ERROR)
+
+	std::string status_code = response.substr(9, 3);
+	std::string status_message = response.substr(12, response.find(CRLF) - 12);
+
+	std::stringstream ss(status_code);
+	int status;
+	ss >> status;
+
+	if (status < 400)
+		LOG(connection.getConnectionID(),
+			connection.getRequest()->getRequestLine() + " - " + status_code + status_message,
+			SUCCESS)
+	else
+		LOG(connection.getConnectionID(),
+			connection.getRequest()->getRequestLine() + " - " + status_code + status_message,
+			ERROR)
+
+	int hasConnectionField = !connection.getRequest()->getHeaderField("Connection").empty();
+	if (hasConnectionField &&
+		connection.getRequest()->getHeaderField("Connection") != "keep-alive")
 	{
-		if (send(connection, response.c_str(), response.size(), 0) < 0)
-			MESSAGE("Sending response to socket", ERROR)
-
-		std::string status_code = response.substr(9, 3);
-		std::string status_message = response.substr(12, response.find(CRLF) - 12);
-
-		std::stringstream ss(status_code);
-		int status;
-		ss >> status;
-
-		if (status < 400) {
-			MESSAGE(status_code + status_message, RESPONSE) }
-		else {
-			MESSAGE(status_code + status_message, ERROR) }
-
-		closeConnection(connection);
-		FD_CLR(connection, &this->_write_sockets);
+		closeConnection(connection.getSocket());
+		Cluster::run();
+	}
+	else
+	{
+		delete connection.getRequest();
+		connection.setRequest(NULL);
+		connection.setResponse(std::string());
 	}
 }

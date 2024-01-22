@@ -6,7 +6,7 @@
 /*   By: maricard <maricard@student.porto.com>      +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2023/10/17 15:56:15 by bsilva-c          #+#    #+#             */
-/*   Updated: 2023/12/04 13:20:28 by maricard         ###   ########.fr       */
+/*   Updated: 2024/01/20 19:04:08 by bsilva-c         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -20,6 +20,7 @@
 #define HERE printf("HERE\n")
 
 # define DEBUG true
+# define MAX_CONNECTIONS 1024
 
 // colors foreground
 # define F_BLACK    "\033[1;30m"
@@ -47,7 +48,7 @@
 # define WARNING 2
 # define INFORMATION 3
 # define REQUEST 4
-# define RESPONSE 5
+# define SUCCESS 5
 
 # define CRLF "\r\n"
 
@@ -59,6 +60,33 @@
 # define REDIR 32
 
 # define MESSAGE(message, level) {\
+    time_t current = std::time(0);\
+    tm* time = std::localtime(&current);\
+    if (level == ERROR)\
+    {\
+        std::cerr << B_RED "[" << std::setw(2) << std::setfill('0') <<\
+        time->tm_hour << ":"  << std::setw(2) << std::setfill('0') <<\
+        time->tm_min << ":" << std::setw(2) << std::setfill('0') <<\
+        time->tm_sec << "]" << RESET F_RED;\
+    }\
+    else if (level == WARNING)\
+    {\
+        std::cerr << B_YELLOW "[" << std::setw(2) << std::setfill('0') <<\
+        time->tm_hour << ":"  << std::setw(2) << std::setfill('0') <<\
+        time->tm_min << ":" << std::setw(2) << std::setfill('0') <<\
+        time->tm_sec << "]" << RESET F_YELLOW;\
+    }\
+    else if (level == INFORMATION)\
+    {\
+        std::cerr << B_BLUE "[" << std::setw(2) << std::setfill('0') <<\
+        time->tm_hour << ":"  << std::setw(2) << std::setfill('0') <<\
+        time->tm_min << ":" << std::setw(2) << std::setfill('0') <<\
+        time->tm_sec << "]" << RESET F_BLUE;\
+    }\
+    std::cerr << " " << message << RESET << std::endl;\
+}
+
+# define LOG(id, message, level) {\
     if (DEBUG)\
     {\
         time_t current = std::time(0);\
@@ -68,36 +96,29 @@
             std::cerr << B_RED "[" << std::setw(2) << std::setfill('0') <<\
             time->tm_hour << ":"  << std::setw(2) << std::setfill('0') <<\
             time->tm_min << ":" << std::setw(2) << std::setfill('0') <<\
-            time->tm_sec << "]" << RESET F_RED " Error: ";\
+            time->tm_sec << "]" << RESET F_RED " [" << id << "]";\
         }\
-        else if (level == WARNING)\
+        else if (level == WARNING || level == REQUEST)\
         {\
             std::cerr << B_YELLOW "[" << std::setw(2) << std::setfill('0') <<\
             time->tm_hour << ":"  << std::setw(2) << std::setfill('0') <<\
             time->tm_min << ":" << std::setw(2) << std::setfill('0') <<\
-            time->tm_sec << "]" << RESET F_YELLOW " Warning: ";\
+            time->tm_sec << "]" << RESET F_YELLOW " [" << id << "]";\
         }\
         else if (level == INFORMATION)\
         {\
             std::cerr << B_BLUE "[" << std::setw(2) << std::setfill('0') <<\
             time->tm_hour << ":"  << std::setw(2) << std::setfill('0') <<\
             time->tm_min << ":" << std::setw(2) << std::setfill('0') <<\
-            time->tm_sec << "]" << RESET F_BLUE " Info: ";\
+            time->tm_sec << "]" << RESET F_BLUE " [" << id << "]";\
         }\
-		else if (level == REQUEST)\
+        else if (level == SUCCESS)\
         {\
             std::cerr << B_BLUE "[" << std::setw(2) << std::setfill('0') <<\
             time->tm_hour << ":"  << std::setw(2) << std::setfill('0') <<\
             time->tm_min << ":" << std::setw(2) << std::setfill('0') <<\
-            time->tm_sec << "]" << RESET F_YELLOW " Request  -> ";\
+            time->tm_sec << "]" << RESET F_GREEN " [" << id << "]";\
         }\
-		else if (level == RESPONSE)\
-        {\
-            std::cerr << B_BLUE "[" << std::setw(2) << std::setfill('0') <<\
-            time->tm_hour << ":"  << std::setw(2) << std::setfill('0') <<\
-            time->tm_min << ":" << std::setw(2) << std::setfill('0') <<\
-            time->tm_sec << "]" << RESET F_GREEN " Response -> ";\
-        }\
-        std::cerr << message << RESET << std::endl;\
+        std::cerr << " " << message << RESET << std::endl;\
     }\
 }

@@ -6,7 +6,7 @@
 /*   By: maricard <maricard@student.porto.com>      +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2023/10/13 12:51:53 by bsilva-c          #+#    #+#             */
-/*   Updated: 2023/11/28 15:42:19 by maricard         ###   ########.fr       */
+/*   Updated: 2024/01/18 18:21:14 by bsilva-c         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -15,6 +15,7 @@
 #include "CommonDirectives.hpp"
 #include "Location.hpp"
 #include "Request.hpp"
+#include "Connection.hpp"
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
@@ -25,9 +26,9 @@
 #include <dirent.h>
 
 class Request;
-
 class Location;
 
+class Connection;
 class Server : public CommonDirectives
 {
 	std::vector<std::string> _serverNames;
@@ -69,10 +70,10 @@ public:
 	int setLocation(const std::string& dir, Location* value);
 	int setDirective(const std::string& directive, const std::string& value);
 
-	std::string getFile(Request& request);
-	std::string deleteFile(Request& request);
-	std::string directoryListing(Request& request);
-	std::string redirect(Request& request);
+	static std::string getFile(Request& request);
+	static std::string deleteFile(Connection& connection);
+	static std::string directoryListing(Connection& connection);
+	std::string redirect(Connection& connection);
 
 	int run();
 	void stop();

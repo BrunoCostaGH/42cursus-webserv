@@ -6,7 +6,7 @@
 /*   By: maricard <maricard@student.porto.com>      +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2023/10/13 12:51:47 by bsilva-c          #+#    #+#             */
-/*   Updated: 2023/12/04 20:04:44 by maricard         ###   ########.fr       */
+/*   Updated: 2024/01/18 18:20:45 by bsilva-c         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -349,7 +349,7 @@ int Server::run()
 		return (1);
 	}
 
-	if (listen(this->_socket, 1) < 0)
+	if (listen(this->_socket, MAX_CONNECTIONS) < 0)
 	{
 		std::stringstream ss;
 		ss << errno;
@@ -378,10 +378,10 @@ std::string Server::getFile(Request& request)
 	return (Response::buildResponse(header, request.getExtension(), body));
 }
 
-std::string Server::deleteFile(Request& request)
+std::string Server::deleteFile(Connection& connection)
 {
-	if (std::remove(request.getPath().c_str()) != 0)
-		return (Response::buildErrorResponse(500));
+	if (std::remove(connection.getRequest()->getPath().c_str()) != 0)
+		return (Response::buildErrorResponse(connection, 500));
 
 	std::map<std::string, std::string> header;
 	std::vector<char> body;
@@ -392,19 +392,16 @@ std::string Server::deleteFile(Request& request)
 static std::string dirListHtml(std::vector<std::string>& content)
 {
 	std::string response;
+	std::string htmlCode;
 
-	response.append(std::string("HTTP/1.1 200 OK") + CRLF);
-	response.append(std::string("Content-Type: text/html") + CRLF);
-	response.append(std::string("Server: Webserv (Unix)") + CRLF);
-	response.append(CRLF);
-	response.append("<!DOCTYPE html>\n"
+	htmlCode.append("<!DOCTYPE html>\n"
 					"<html lang=\"en\">\n"
 					"<head>\n"
 					"	<meta charset=\"UTF-8\">\n"
 					"	<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n"
 					"	<title>Directory Listing</title>\n"
 					"	<style>\n"
-					"		body {\n"
+					"		htmlCode {\n"
 					"			font-family: Arial, sans-serif;\n"
 					"			display: flex;\n"
 					"			justify-content: center;\n"
@@ -434,31 +431,41 @@ static std::string dirListHtml(std::vector<std::string>& content)
 					"		}\n"
 					"	</style>\n"
 					"</head>\n"
-					"<body>\n"
+					"<htmlCode>\n"
 					"	<div class=\"container\">\n"
 					"	<h1>Directory List</h1>\n"
 					"	<ul>\n");
 
 	for (unsigned i = 0; i < content.size(); i++)
 	{
-		response.append("		<a href=\"" + content[i] + "\">" + content[i] + "<br></a>\n");
+		htmlCode.append("		<a href=\"" + content[i] + "\">" + content[i] +
+						"<br></a>\n");
 	}
-	response.append("	</ul>\n"
+	htmlCode.append("	</ul>\n"
 					"	</div>\n"
-					"</body>\n"
-					"</html>\n");
+					"</htmlCode>\n"
+					"</html>");
+
+	std::stringstream contentSize;
+	contentSize << htmlCode.size();
+	response.append(std::string("HTTP/1.1 200 OK") + CRLF);
+	response.append(std::string("Content-Type: text/html") + CRLF);
+	response.append("Content-Length: " + contentSize.str() + CRLF);
+	response.append(std::string("Server: Webserv (Unix)") + CRLF);
+	response.append(CRLF);
+	response.append(htmlCode);
 	response.append(CRLF);
 
 	return response;
 }
 
-std::string Server::directoryListing(Request& request)
+std::string Server::directoryListing(Connection& connection)
 {
     DIR *dir;
     struct dirent *ent;
 	std::vector<std::string> content;
 
-    if ((dir = opendir(request.getPath().c_str())) != NULL)
+	if ((dir = opendir(connection.getRequest()->getPath().c_str())) != NULL)
 	{
         while ((ent = readdir(dir)) != NULL)
 		{
@@ -478,16 +485,17 @@ std::string Server::directoryListing(Request& request)
         closedir(dir);
     }
 	else
-		return (Response::buildErrorResponse(404));
+		return (Response::buildErrorResponse(connection, 404));
 
     return (dirListHtml(content));
 }
 
-std::string Server::redirect(Request& request)
+std::string Server::redirect(Connection& connection)
 {
-	std::string path = request.getPath();
+	std::string path = connection.getRequest()->getPath();
 	Location* location = this->getLocation(path);
-	return (Response::buildRedirectResponse(location->getRedirect(*this)));
+	return (Response::buildRedirectResponse(connection,
+											location->getRedirect(*this)));
 }
 
 void Server::stop()
