@@ -6,7 +6,7 @@
 /*   By: maricard <maricard@student.porto.com>      +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2023/10/13 12:41:18 by bsilva-c          #+#    #+#             */
-/*   Updated: 2023/11/29 16:03:12 by bsilva-c         ###   ########.fr       */
+/*   Updated: 2024/01/18 15:29:14 by bsilva-c         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -15,15 +15,18 @@
 #include "Server.hpp"
 #include "Request.hpp"
 #include "Cgi.hpp"
+#include "Connection.hpp"
 #include <sys/select.h>
 #include <unistd.h>
 #include <fstream>
 
 class Cgi;
+class Connection;
 class Cluster
 {
+	int _connection_id;
 	std::vector<Server*> _serverList;
-	std::map<Server*, int>	_connections;
+	std::map<int, Connection*> _connections;
 	fd_set _master_sockets, _read_sockets, _write_sockets;
 
 public:
@@ -32,12 +35,16 @@ public:
 	Cluster& operator=(const Cluster&);
 	~Cluster();
 
+	int getNextConnectionID();
 	std::vector<Server*> getServerList() const;
 
 	int configure(const std::string& file_path);
+	void boot();
 	void run();
-	void acceptNewConnections(int connection);
-	void readRequest(Server* server, int connection, std::string& response);
-	void sendResponse(int connection, std::string& response);
-	std::string checkRequestedOption(int selectedOptions, Request& request, Server* server);
+	void acceptNewConnections();
+	void closeConnection(int socket);
+	void readRequest(Connection& connection);
+	void sendResponse(Connection& connection);
+	static std::string checkRequestedOption(int selectedOptions,
+									 Connection& connection);
 };

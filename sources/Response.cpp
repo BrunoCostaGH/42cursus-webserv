@@ -6,7 +6,7 @@
 /*   By: maricard <maricard@student.porto.com>      +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2023/10/30 19:09:05 by bsilva-c          #+#    #+#             */
-/*   Updated: 2023/12/04 16:59:16 by maricard         ###   ########.fr       */
+/*   Updated: 2024/01/18 19:33:59 by bsilva-c         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -15,7 +15,6 @@
 std::map<std::string, std::string> Response::_errorStatus;
 std::map<std::string, std::string> Response::_redirStatus;
 std::map<std::string, std::string> Response::_contentType;
-Server* Response::_server;
 
 Response::Response()
 {
@@ -211,17 +210,20 @@ std::string Response::buildResponse(std::map<std::string, std::string>& header,
 	return (response);
 }
 
-std::string Response::buildErrorResponse(int _errorCode)
+std::string Response::buildErrorResponse(Connection& connection, int _errorCode)
 {
 	initializeErrorStatus();
 
 	std::string response;
 	std::stringstream errorCode;
 	errorCode << _errorCode;
-	if (!Response::_server || _errorStatus[errorCode.str()].empty())
+	if (!connection.getServer() || _errorStatus[errorCode.str()].empty())
 	{
 		if (_errorStatus[errorCode.str()].empty())
-			MESSAGE("Internal error (Error " + errorCode.str() + ") encountered during processing", ERROR)
+			LOG(connection.getConnectionID(),
+				"Internal error (Error " + errorCode.str() +
+				") encountered during processing",
+				ERROR)
 		response.append(std::string("HTTP/1.1 500 Internal Server Error") + CRLF);
 		response.append(std::string("Content-Type: text/html") + CRLF);
 		response.append(std::string("Server: Webserv (Unix)") + CRLF);
@@ -231,13 +233,13 @@ std::string Response::buildErrorResponse(int _errorCode)
 		return (response);
 	}
 	std::string htmlCode;
-	if (!Response::_server->getErrorPage(_errorCode).empty())
+	if (!connection.getServer()->getErrorPage(_errorCode).empty())
 	{
 		char c;
 		std::fstream file;
-		std::string file_name = Response::_server->getErrorPage(_errorCode);
+		std::string file_name = connection.getServer()->getErrorPage(_errorCode);
 
-		file.open((_server->getRoot() + file_name).c_str());
+		file.open((connection.getServer()->getRoot() + file_name).c_str());
 		if (file.is_open())
 		{
 			while (file.get(c))
@@ -245,7 +247,9 @@ std::string Response::buildErrorResponse(int _errorCode)
 			file.close();
 		}
 		else
-			MESSAGE(file_name + ": " + (std::string)strerror(errno), WARNING)
+		LOG(connection.getConnectionID(),
+			file_name + ": " + (std::string)strerror(errno),
+			WARNING)
 		
 		goto createHttpResponse; 
 	}
@@ -310,20 +314,18 @@ std::string Response::buildErrorResponse(int _errorCode)
 		return (response);
 }
 
-std::string Response::buildRedirectResponse(const std::pair<std::string, std::string>& redirect)
+std::string Response::buildRedirectResponse(Connection& connection,
+											const std::pair<std::string,
+											std::string>& redirect)
 {
 	initializeRedirStatus();
 	if (_redirStatus.empty())
-		return (Response::buildErrorResponse(500));
+		return (Response::buildErrorResponse(connection, 500));
 
 	std::string response;
 	response.append("HTTP/1.1 " + redirect.first + " " + _redirStatus[redirect.first] + CRLF);
 	response.append("Location: " + redirect.second + CRLF);
+	response.append("Content-Length: 0" CRLF);
 	response.append(CRLF);
 	return (response);
-}
-
-void Response::setResponseServer(Server* server)
-{
-	Response::_server = server;
 }

@@ -6,7 +6,7 @@
 /*   By: maricard <maricard@student.porto.com>      +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2023/11/07 20:15:28 by maricard          #+#    #+#             */
-/*   Updated: 2023/12/04 16:41:35 by maricard         ###   ########.fr       */
+/*   Updated: 2024/01/17 21:16:44 by bsilva-c         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -63,20 +63,20 @@ Cgi::~Cgi()
         delete[] _envp[i];
 }
 
-std::string	Cgi::runCGI()
+std::string	Cgi::runCGI(Connection& connection)
 {
 	std::string filename = ".tmp";
 	int 		file_fd;
 	FILE*		file = NULL;
 
 	if ((file_fd = sendDataToCgi(filename, file)) == -1)
-		return Response::buildErrorResponse(500);
+		return Response::buildErrorResponse(connection, 500);
 
 	int pipe_fd[2];
 	if (pipe(pipe_fd) == -1)
-		return Response::buildErrorResponse(500);
+		return Response::buildErrorResponse(connection, 500);
 
-	std::string response = setArgv();
+	std::string response = setArgv(connection);
 	if (!(response.empty()))
 		return response;
 	
@@ -103,13 +103,13 @@ std::string	Cgi::runCGI()
 		waitpid(pid, &status, 0);
 
 		if (!WIFEXITED(status))
-			return Response::buildErrorResponse(500);
+			return Response::buildErrorResponse(connection, 500);
 	}
 	
 	if (std::remove(filename.c_str()) != 0)
-		return Response::buildErrorResponse(500);
+		return Response::buildErrorResponse(connection, 500);
 
-	response = readDataFromCgi(pipe_fd[READ]);
+	response = readDataFromCgi(connection, pipe_fd[READ]);
 
 	close(pipe_fd[READ]);
 	std::fclose(file);
@@ -138,7 +138,7 @@ int Cgi::sendDataToCgi(const std::string& filename, FILE*& file)
 		return -1;
 }
 
-std::string Cgi::readDataFromCgi(int fd)
+std::string Cgi::readDataFromCgi(Connection& connection, int fd)
 {
 	char* buffer = new char[4096];
 	
@@ -148,7 +148,7 @@ std::string Cgi::readDataFromCgi(int fd)
 	if (read(fd, buffer, 4096) <= 0)
 	{
 		delete [] buffer;
-		return Response::buildErrorResponse(500);
+		return Response::buildErrorResponse(connection, 500);
 	}
 	
 	std::string response = buffer;
@@ -181,10 +181,10 @@ std::string Cgi::readDataFromCgi(int fd)
 	return (Response::buildResponse(header, ".html", body));
 }	
 
-std::string	Cgi::setArgv()
+std::string	Cgi::setArgv(Connection& connection)
 {
 	if (_executable.empty())
-		return Response::buildErrorResponse(500);
+		return Response::buildErrorResponse(connection, 500);
 	_argv[0] = myStrdup(_executable.c_str());
 	_argv[1] = myStrdup(_path.c_str());
 	_argv[2] = NULL;

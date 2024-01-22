@@ -13,6 +13,7 @@
 #pragma once
 
 #include "Request.hpp"
+#include "Connection.hpp"
 #include <unistd.h>
 #include <fstream>
 #include <iostream>
@@ -21,6 +22,7 @@
 #define WRITE 1
 
 class Request;
+class Connection;
 class Cgi
 {
 	private:
@@ -41,10 +43,10 @@ class Cgi
 		Cgi& operator=(const Cgi&);
 		~Cgi();
 
-		std::string	runCGI();
-		static std::string readDataFromCgi(int fd);
+		std::string	runCGI(Connection& connection);
+		static std::string readDataFromCgi(Connection& connection, int fd);
 		int 		sendDataToCgi(const std::string& filename, FILE*& file);
-		std::string	setArgv();
+		std::string	setArgv(Connection& connection);
 		void		setEnvp();
 		static char*		myStrdup(const char* source);
 };
