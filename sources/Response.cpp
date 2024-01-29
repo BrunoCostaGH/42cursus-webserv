@@ -6,7 +6,7 @@
 /*   By: maricard <maricard@student.porto.com>      +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2023/10/30 19:09:05 by bsilva-c          #+#    #+#             */
-/*   Updated: 2024/01/18 19:33:59 by bsilva-c         ###   ########.fr       */
+/*   Updated: 2024/01/29 15:41:43 by bsilva-c         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -226,6 +226,8 @@ std::string Response::buildErrorResponse(Connection& connection, int _errorCode)
 				ERROR)
 		response.append(std::string("HTTP/1.1 500 Internal Server Error") + CRLF);
 		response.append(std::string("Content-Type: text/html") + CRLF);
+		response.append(std::string("Content-Length: 30") + CRLF);
+		response.append(std::string("Connection: close") + CRLF);
 		response.append(std::string("Server: Webserv (Unix)") + CRLF);
 		response.append(CRLF);
 		response.append("<h1>Internal Server Error</h1>");
@@ -247,14 +249,13 @@ std::string Response::buildErrorResponse(Connection& connection, int _errorCode)
 			file.close();
 		}
 		else
-		LOG(connection.getConnectionID(),
-			file_name + ": " + (std::string)strerror(errno),
-			WARNING)
-		
-		goto createHttpResponse; 
+			LOG(connection.getConnectionID(),
+				file_name + ": " + (std::string)strerror(errno),
+				WARNING)
 	}
-	
-	htmlCode = "<!DOCTYPE html>\n"
+	else
+	{
+		htmlCode = "<!DOCTYPE html>\n"
 				"<html lang=\"en\">\n"
 				"\n"
 				"<head>\n"
@@ -300,13 +301,14 @@ std::string Response::buildErrorResponse(Connection& connection, int _errorCode)
 				"</body>\n"
 				"\n"
 				"</html>";
-	
-	createHttpResponse:
+	}
+
 		std::stringstream contentSize;
 		contentSize << htmlCode.size();
 		response.append("HTTP/1.1 " + errorCode.str() + " " + _errorStatus[errorCode.str()] + CRLF);
 		response.append(std::string("Content-Type: text/html") + CRLF);
 		response.append("Content-Length: " + contentSize.str() + CRLF);
+		response.append(std::string("Connection: close") + CRLF);
 		response.append(std::string("Server: Webserv (Unix)") + CRLF);
 		response.append(CRLF);
 		response.append(htmlCode);

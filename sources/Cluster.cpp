@@ -6,7 +6,7 @@
 /*   By: maricard <maricard@student.porto.com>      +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2023/10/13 12:41:04 by bsilva-c          #+#    #+#             */
-/*   Updated: 2024/01/20 19:04:55 by bsilva-c         ###   ########.fr       */
+/*   Updated: 2024/01/29 18:08:52 by bsilva-c         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -431,33 +431,22 @@ void Cluster::readRequest(Connection& connection)
 		request = connection.setRequest(new Request());
 
 	int64_t bytesRead;
-	int64_t bytesLeftToRead = 4096;
-	char buffer[bytesLeftToRead];
-	int error = 0;
+	int32_t bytesToRead = 4096;
+	char buffer[bytesToRead];
 
 	for (size_t i = 0; i < sizeof(buffer); ++i)
 		buffer[i] = '\0';
 
-	if ((bytesRead = recv(connection.getSocket(), buffer, bytesLeftToRead, 0)) > 0)
+	if ((bytesRead = recv(connection.getSocket(), buffer, bytesToRead, 0)) > 0)
 	{
 		connection.setTimestamp(std::time(0));
 
-		error = request->parseRequest(*this, connection, buffer, bytesRead);
-		/*
-		 * Continue reading from the socket, if there is content
-		 * left to read beyond the specified Content-Length.
-		 */
-		int bytesToRead = 4096;
-		char body_buffer[bytesToRead];
-		while ((bytesRead = recv(connection.getSocket(), body_buffer, bytesToRead, 0)) != -1 &&
-			bytesRead != 0);
+		if (!request->hasHeader())
+			request->parseRequest(*this, connection, buffer, bytesRead);
+		else
+			request->parseBody(buffer, bytesRead);
 
 		request->displayVars();
-
-		int selectedOptions = request->isValidRequest(*connection.getServer(), error);
-
-		if (!error)
-			connection.setResponse(checkRequestedOption(selectedOptions, connection));
 	}
 	else
 	{
@@ -465,9 +454,6 @@ void Cluster::readRequest(Connection& connection)
 		Cluster::run();
 		return;
 	}
-
-	if (error)
-		connection.setResponse(Response::buildErrorResponse(connection, error));
 }
 
 std::string Cluster::checkRequestedOption(int selectedOptions,
@@ -492,16 +478,49 @@ std::string Cluster::checkRequestedOption(int selectedOptions,
 	return Response::buildErrorResponse(connection, 500);
 }
 
+static bool isReadCompleted(Request* request)
+{
+	if (!request || !request->hasHeader())
+		return (false);
+
+	bool isChunked = request->hasHeader() &&
+				 request->getHeaderField("Transfer-Encoding") == "chunked";
+	bool hasBody = (!isChunked && request->getBody().size() >= request->getContentLength()) ||
+				   (isChunked && searchChunkedRequestEnd(request->getBody()));
+
+	if (!hasBody)
+		return (false);
+	if (isChunked)
+		request->parseChunkedRequest();
+	return (true);
+}
+
+static void processResponse(Connection& connection, Request& request)
+{
+	int error = request.checkErrors(connection);
+	int selectedOptions = request.isValidRequest(*connection.getServer(), error);
+
+	if (!error)
+		connection.setResponse(Cluster::checkRequestedOption(selectedOptions, connection));
+	else
+		connection.setResponse(Response::buildErrorResponse(connection, error));
+
+}
+
 void Cluster::sendResponse(Connection& connection)
 {
+	Request* request = connection.getRequest();
+	if (!isReadCompleted(request))
+		return ;
+
+	processResponse(connection, *request);
+
 	std::string response = connection.getResponse();
 	if (response.empty())
 		return;
 
 	if (send(connection.getSocket(), response.c_str(), response.size(), 0) < 0)
-	LOG(connection.getConnectionID(),
-		"Sending response to socket",
-		ERROR)
+		LOG(connection.getConnectionID(), "Sending response to socket", ERROR)
 
 	std::string status_code = response.substr(9, 3);
 	std::string status_message = response.substr(12, response.find(CRLF) - 12);
@@ -512,23 +531,23 @@ void Cluster::sendResponse(Connection& connection)
 
 	if (status < 400)
 		LOG(connection.getConnectionID(),
-			connection.getRequest()->getRequestLine() + " - " + status_code + status_message,
+			request->getRequestLine() + " - " + status_code + status_message,
 			SUCCESS)
 	else
 		LOG(connection.getConnectionID(),
-			connection.getRequest()->getRequestLine() + " - " + status_code + status_message,
+			request->getRequestLine() + " - " + status_code + status_message,
 			ERROR)
 
-	int hasConnectionField = !connection.getRequest()->getHeaderField("Connection").empty();
-	if (hasConnectionField &&
-		connection.getRequest()->getHeaderField("Connection") != "keep-alive")
+	bool hasConnectionField = !request->getHeaderField("Connection").empty();
+	bool isKeepAlive = request->getHeaderField("Connection") == "keep-alive";
+	if (status >= 400 || (hasConnectionField && !isKeepAlive))
 	{
 		closeConnection(connection.getSocket());
 		Cluster::run();
 	}
 	else
 	{
-		delete connection.getRequest();
+		delete request;
 		connection.setRequest(NULL);
 		connection.setResponse(std::string());
 	}

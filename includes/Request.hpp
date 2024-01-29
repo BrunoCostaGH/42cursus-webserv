@@ -6,7 +6,7 @@
 /*   By: maricard <maricard@student.porto.com>      +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2023/10/17 15:58:21 by maricard          #+#    #+#             */
-/*   Updated: 2024/01/18 17:06:51 by bsilva-c         ###   ########.fr       */
+/*   Updated: 2024/01/24 21:25:52 by bsilva-c         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -36,16 +36,15 @@ class Connection;
 class Request
 {
 	private:
-		std::string _method;
-		std::string _uri;
-		std::string _protocol;
+		std::string _method, _uri, _protocol;
 		std::string _path;
 		std::string _executable;
 		std::string _query;
 		std::map<std::string, std::string> _header;
 		std::vector<char> _body;
-		u_int32_t 	_bodyLength;
+		u_int32_t 	_contentLength;
 		std::string _uploadStore;
+		bool		_hasHeader;
 
 		Request& operator=(const Request& other);
 	
@@ -64,14 +63,16 @@ class Request
 		std::string getExtension();
 		std::string getExecutable() const;
 		std::string getHeaderField(const std::string& field);
+		u_int32_t getContentLength();
 
-		int		parseRequest(Cluster& cluster,
-							 Connection& connection,
-							 char* buffer,
-							 int64_t bytesAlreadyRead);
-		int		parseBody(int socket, char* chunk, int64_t bytesToRead);
-		int		parseChunkedRequest(int socket, char* buffer, int64_t bytesToRead);
+		void parseRequest(Cluster& cluster,
+						  Connection& connection,
+						  char* buffer,
+						  int64_t bytesAlreadyRead);
+		void parseBody(char* buffer, int64_t bytesRead);
+		void parseChunkedRequest();
 		int		checkErrors(Connection& connection);
 		void	displayVars();
 		int		isValidRequest(Server& server, int& error);
+		bool	hasHeader() const;
 };
