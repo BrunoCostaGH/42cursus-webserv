@@ -6,7 +6,7 @@
 /*   By: maricard <maricard@student.porto.com>      +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2023/10/17 17:14:44 by maricard          #+#    #+#             */
-/*   Updated: 2024/01/29 16:31:30 by bsilva-c         ###   ########.fr       */
+/*   Updated: 2024/01/29 20:06:11 by bsilva-c         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -19,7 +19,7 @@ Request::Request()
 }
 
 Request::Request(const Request& copy)
-	: _contentLength(copy._contentLength)
+	: _contentLength(copy._contentLength), _hasHeader(copy._hasHeader)
 {
 	*this = copy;
 }
