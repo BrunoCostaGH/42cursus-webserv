@@ -6,7 +6,7 @@
 /*   By: maricard <maricard@student.porto.com>      +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2023/10/17 17:14:44 by maricard          #+#    #+#             */
-/*   Updated: 2024/01/20 18:41:09 by bsilva-c         ###   ########.fr       */
+/*   Updated: 2024/01/29 16:31:30 by bsilva-c         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -14,12 +14,12 @@
 #include "Request.hpp"
 
 Request::Request()
-	: _bodyLength(0)
+	: _contentLength(0), _hasHeader(false)
 {
 }
 
 Request::Request(const Request& copy)
-	: _bodyLength(copy._bodyLength)
+	: _contentLength(copy._contentLength)
 {
 	*this = copy;
 }
@@ -41,7 +41,7 @@ Request& Request::operator=(const Request& other)
 	_protocol = other._protocol;
 	_header = other._header;
 	_body = other._body;
-	_bodyLength = other._bodyLength;
+	_contentLength = other._contentLength;
 	_uploadStore = other._uploadStore;
 	return *this;
 }
@@ -96,6 +96,16 @@ std::string Request::getHeaderField(const std::string& field)
 	return _header[field];
 }
 
+u_int32_t Request::getContentLength()
+{
+	std::stringstream ss;
+	int _return;
+
+	ss << getHeaderField("Content-Length");
+	ss >> _return;
+	return (_return);
+}
+
 static void selectServer(Cluster& cluster, Connection& connection)
 {
 	std::stringstream host(connection.getRequest()->getHeaderField("Host"));
@@ -114,12 +124,11 @@ static void selectServer(Cluster& cluster, Connection& connection)
 	}
 }
 
-int Request::parseRequest(Cluster& cluster,
-						  Connection& connection,
-						  char* buffer,
-						  int64_t bytesAlreadyRead)
+void Request::parseRequest(Cluster& cluster,
+						   Connection& connection,
+						   char* buffer,
+						   int64_t bytesAlreadyRead)
 {
-	int error;
 	std::string request = buffer;
 	std::stringstream ss(request);
 	std::string line;
@@ -145,29 +154,19 @@ int Request::parseRequest(Cluster& cluster,
     	}
     }
 
+	this->_hasHeader = true;
 	if (line != "\n")
-		return 413;
+		return ;
 
 	selectServer(cluster, connection);
-
-	if ((error = checkErrors(connection)))
-		return error;
 
 	uint32_t pos = 0;
 	while (request.compare(pos, 4, "\r\n\r\n") != 0)
 		pos++;
 	pos += 4;
 
-	if (_header["Transfer-Encoding"] == "chunked")
-		error = parseChunkedRequest(connection.getSocket(),
-									buffer + pos,
-									bytesAlreadyRead - pos);
-	else if (_method == "POST")
-		error = parseBody(connection.getSocket(),
-						  buffer + pos,
-						  bytesAlreadyRead - pos);
-
-	return error;
+	if (_method == "POST")
+		parseBody(buffer + pos, bytesAlreadyRead - pos);
 }
 
 int Request::checkErrors(Connection& connection)
@@ -185,79 +184,43 @@ int Request::checkErrors(Connection& connection)
 	{
 		return 415;
 	}
-	
 	if (_method == "POST" && _header["Content-Length"].empty() && _header["Transfer-Encoding"] != "chunked")
 	{
 		return 411;
 	}
 	else if (!_header["Content-Length"].empty() && _header["Transfer-Encoding"] != "chunked")
 	{
-		std::istringstream ss(_header["Content-Length"]);
-		ss >> _bodyLength;
-
-		if (_bodyLength > connection.getServer()->getClientMaxBodySize())
+		if (getContentLength() > connection.getServer()->getClientMaxBodySize())
 			return 413;
 	}
-	
-	return 0;
-}
 
-int Request::parseBody(int socket, char* previousBuffer, int64_t bytesToRead)
-{
-	int64_t bytesRead;
-	char 	buffer[4096];
-	
-	for (int i = 0; i < bytesToRead; i++)
-		_body.push_back(previousBuffer[i]);
-
-	if (_body.size() == _bodyLength)
-		return 0;
-
-	for (unsigned i = 0; i < sizeof(buffer); ++i)
-		buffer[i] = '\0';
-
-	while ((bytesRead = recv(socket, buffer, 4096, 0)) > 0)
-	{
-		for (unsigned i = 0; i < bytesRead; i++)
-			_body.push_back(buffer[i]);
-		
-		for (unsigned i = 0; i < sizeof(buffer); ++i)
-			buffer[i] = '\0';
-
-		if (_body.size() == _bodyLength)
-			return 0;
-	}
-
-	if (_body.size() != _bodyLength)
+	if (!_header["Content-Length"].empty() && getBody().size() > getContentLength())
 		return 400;
-	else if (bytesRead == -1)
-		return 500;
 
+	u_int32_t header_length = 0;
+	for (std::map<std::string, std::string>::iterator it = _header.begin(); it != _header.end(); it++)
+	{
+		header_length += it->first.size() + 2;
+		header_length += it->second.size();
+	}
+	if (header_length > 4096)
+		return 413;
 	return 0;
 }
 
-int Request::parseChunkedRequest(int socket,
-								 char* previousBuffer,
-								 int64_t bytesToRead)
+void Request::parseBody(char* buffer, int64_t bytesRead)
 {
-	int64_t bytesRead;
-	char 	buffer[4096];
-	std::vector<char> chunkedBody;
-
-	for (unsigned i = 0; i < bytesToRead; i++)
-		chunkedBody.push_back(previousBuffer[i]);
+	for (int i = 0; i < bytesRead; i++)
+		_body.push_back(buffer[i]);
 
 	for (unsigned i = 0; i < sizeof(buffer); ++i)
 		buffer[i] = '\0';
+}
 
-	while ((bytesRead = recv(socket, buffer, 4096, 0)) > 0)
-	{
-		for (unsigned i = 0; i < bytesRead; i++)
-			chunkedBody.push_back(buffer[i]);
-
-		for (unsigned i = 0; i < bytesRead; ++i)
-			buffer[i] = '\0';
-	}
+void Request::parseChunkedRequest()
+{
+	std::vector<char> chunkedBody = _body;
+	_body.clear();
 
 	uint32_t chunkCharSize = getHexSize(chunkedBody, 0);
 	uint32_t chunkSize = getHexFromChunked(chunkedBody, 0);
@@ -271,13 +234,7 @@ int Request::parseChunkedRequest(int socket,
 		chunkSize = getHexFromChunked(chunkedBody, pos);
 		pos += chunkCharSize + 2;
 	}
-
-	if (chunkSize != 0)
-		return 400;
-	
-	return 0;
 }
-
 
 static int selectOptionAndReturn(Request& request)
 {
@@ -417,4 +374,9 @@ void Request::displayVars()
 //		for (; it != _body.end(); it++)
 //			std::cout << *it;
 //	}
+}
+
+bool Request::hasHeader() const
+{
+	return (this->_hasHeader);
 }
