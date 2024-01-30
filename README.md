@@ -1,4 +1,4 @@
-# **42cursus-cub3d** ([Subject](/.github/en.subject.pdf))
+# **42cursus-webserv** ([Subject](/.github/en.subject.pdf))
 This project was graded <strong>110/100</strong>.
 
 ## 📝 **Authorship**
