@@ -6,7 +6,7 @@
 /*   By: maricard <maricard@student.porto.com>      +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2023/10/30 19:09:15 by bsilva-c          #+#    #+#             */
-/*   Updated: 2024/01/18 18:04:38 by bsilva-c         ###   ########.fr       */
+/*   Updated: 2024/01/30 16:24:29 by bsilva-c         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -30,12 +30,12 @@ class Response
 	static std::map<std::string, std::string> _redirStatus;
 	static std::map<std::string, std::string> _contentType;
 
-public:
 	Response();
 	Response(const Response&);
 	Response& operator=(const Response&);
 	~Response();
 
+public:
 	static std::string buildResponse(std::map<std::string, std::string>& header,
 									 std::string extension,
 									 std::vector<char>& body);

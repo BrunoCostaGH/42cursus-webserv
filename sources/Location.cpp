@@ -6,7 +6,7 @@
 /*   By: maricard <maricard@student.porto.com>      +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2023/10/13 13:01:17 by bsilva-c          #+#    #+#             */
-/*   Updated: 2023/12/04 16:12:38 by bsilva-c         ###   ########.fr       */
+/*   Updated: 2024/01/30 16:15:56 by bsilva-c         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -175,7 +175,7 @@ int Location::setCgiPass(const std::string& value)
 int Location::setRedirect(const std::string& value)
 {
 	std::stringstream ss(value);
-	int code;
+	int code = 0;
 	std::string uri;
 
 	ss >> code;
