@@ -6,7 +6,7 @@
 /*   By: maricard <maricard@student.porto.com>      +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2023/10/17 17:14:44 by maricard          #+#    #+#             */
-/*   Updated: 2024/01/29 20:06:11 by bsilva-c         ###   ########.fr       */
+/*   Updated: 2024/01/30 16:15:56 by bsilva-c         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -99,11 +99,11 @@ std::string Request::getHeaderField(const std::string& field)
 u_int32_t Request::getContentLength()
 {
 	std::stringstream ss;
-	int _return;
+	int value = 0;
 
 	ss << getHeaderField("Content-Length");
-	ss >> _return;
-	return (_return);
+	ss >> value;
+	return (value);
 }
 
 static void selectServer(Cluster& cluster, Connection& connection)

@@ -6,7 +6,7 @@
 /*   By: maricard <maricard@student.porto.com>      +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2023/10/13 12:41:04 by bsilva-c          #+#    #+#             */
-/*   Updated: 2024/01/29 20:20:14 by bsilva-c         ###   ########.fr       */
+/*   Updated: 2024/01/30 16:15:56 by bsilva-c         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -530,7 +530,7 @@ void Cluster::sendResponse(Connection& connection)
 	std::string status_message = response.substr(12, response.find(CRLF) - 12);
 
 	std::stringstream ss(status_code);
-	int status;
+	int status = 0;
 	ss >> status;
 
 	if (status < 400)

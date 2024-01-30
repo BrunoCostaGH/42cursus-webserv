@@ -6,7 +6,7 @@
 /*   By: maricard <maricard@student.porto.com>      +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2023/11/10 20:09:21 by maricard          #+#    #+#             */
-/*   Updated: 2024/01/29 17:25:02 by maricard         ###   ########.fr       */
+/*   Updated: 2024/01/30 16:15:56 by bsilva-c         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -50,7 +50,7 @@ uint32_t	getHexFromChunked(const std::vector<char>& body, unsigned pos)
 	}
 
 	std::stringstream ss(hex);
-	uint32_t value;
+	uint32_t value = 0;
 
 	ss >> std::hex >> value;
 

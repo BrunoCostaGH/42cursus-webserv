@@ -6,7 +6,7 @@
 /*   By: maricard <maricard@student.porto.com>      +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2023/10/17 15:58:21 by maricard          #+#    #+#             */
-/*   Updated: 2024/01/24 21:25:52 by bsilva-c         ###   ########.fr       */
+/*   Updated: 2024/01/30 16:19:43 by bsilva-c         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -47,7 +47,7 @@ class Request
 		bool		_hasHeader;
 
 		Request& operator=(const Request& other);
-	
+
 	public:
 		Request();
 		Request(const Request& copy);

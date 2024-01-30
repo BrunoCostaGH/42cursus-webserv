@@ -6,7 +6,7 @@
 /*   By: maricard <maricard@student.porto.com>      +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2023/10/13 12:41:18 by bsilva-c          #+#    #+#             */
-/*   Updated: 2023/11/29 16:27:10 by bsilva-c         ###   ########.fr       */
+/*   Updated: 2024/01/30 16:15:56 by bsilva-c         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -36,11 +36,12 @@ class Cgi
 		std::map<std::string, std::string> 	_header;
 		std::vector<char> 	_body;
 
-	public:
 		Cgi();
-		Cgi(Request& request);
 		Cgi(const Cgi&);
 		Cgi& operator=(const Cgi&);
+
+	public:
+		Cgi(Request& request);
 		~Cgi();
 
 		std::string	runCGI(Connection& connection);

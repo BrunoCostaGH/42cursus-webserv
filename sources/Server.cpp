@@ -6,7 +6,7 @@
 /*   By: maricard <maricard@student.porto.com>      +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2023/10/13 12:51:47 by bsilva-c          #+#    #+#             */
-/*   Updated: 2024/01/18 18:20:45 by bsilva-c         ###   ########.fr       */
+/*   Updated: 2024/01/30 16:24:43 by bsilva-c         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -205,7 +205,7 @@ int Server::setAddress(const std::string& value)
 
 int Server::setListen(const std::string& value)
 {
-	int port = -1;
+	int port = 0;
 	std::string address;
 	std::string buf;
 	std::stringstream ss(value);
@@ -224,7 +224,7 @@ int Server::setListen(const std::string& value)
 	std::getline(ss, buf, ':');
 	std::stringstream val(buf);
 	val >> port;
-	if (port <= 0 || port > std::numeric_limits<u_int16_t>::max() ||
+	if (port == 0 || port > std::numeric_limits<u_int16_t>::max() ||
 		val.str().find_first_not_of(" \t0123456789") != std::string::npos)
 		return (1);
 	this->_listen = port;
